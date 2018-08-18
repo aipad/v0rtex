@@ -2,41 +2,6 @@
 // Bug by Ian Beer.
 // Exploit by Siguza.
 
-// Status quo:
-// - Escapes sandbox, gets root and tfp0, should work on A7-A10 devices <=10.3.3.
-// - Can call arbitrary kernel functions with up to 7 args via KCALL().
-// - Relies on mach_zone_force_gc() which was removed in iOS 11, but the same
-//   effect should be achievable by continuously spraying through zones and
-//   measuring how long it takes - garbage collection usually takes ages. :P
-// - Occasionally seems to mess with SpringBoard, i.e. apps don't open when you
-//   tap on their icons - sometimes affects only v0rtex, sometimes all of them,
-//   sometimes even freezes the lock screen. Can happen even if the exploit
-//   aborts very early on, so I'm not sure whether it's even due to that, or due
-//   to my broken UI.
-// - Most common panic at this point is "pmap_tte_deallocate(): ... refcnt=0x1",
-//   which can occur when the app is killed, but only if shmem_addr has been
-//   faulted before. Faulting that page can _sometimes_ increase the ref count
-//   on its tte entry, which causes the mentioned panic when the task is
-//   destroyed and its pmap with it. Exact source of this is unknown, but I
-//   suspect it happening in pmap_enter_options_internal(), depending on page
-//   compression status (i.e. if the page is compressed refcnt_updated is set to
-//   true and the ref count isn't increased afterwards, otherwise it is).
-//   On 32-bit such a panic can be temporarily averted with mlock(), but that
-//   seems to cause even greater trouble later with zalloc, and on 64-bit mlock
-//   even refuses to work. Deallocating shmem_addr from our address space does
-//   not fix the problem, and neither does allocating new memory at that address
-//   and faulting into it (which should _guarantee_ that the corresponding pmap
-//   entry is updated). Fixing up the ref count manually is very tedious and
-//   still seems to cause trouble with zalloc. Calling mach_zone_force_gc()
-//   after releasing the IOSurfaceRootUserClient port seems to _somewhat_ help,
-//   as does calling sched_yield() before mach_vm_remap() and faulting the page
-//   right after, so that's what I'm doing for now.
-//   In the long term, this should really be replaced by something deterministic
-//   that _always_ works (like removing the tte entirely).
-
-// Not sure what'll really become of this, but it's certainly not done yet.
-// Pretty sure I'll leave iOS 11 to Ian Beer though, for the time being.
-
 #include <errno.h>              // errno
 #include <sched.h>              // sched_yield
 #include <stdlib.h>             // malloc, free
